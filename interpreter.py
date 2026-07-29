@@ -52,6 +52,59 @@ class BreakSignal(Exception):
 class ContinueSignal(Exception):
     pass
 
+class YieldSignal(Exception):
+    def __init__(self, value):
+        self.value = value
+
+
+import threading
+import queue
+
+class MinGenerator:
+    """Generator instance running in a dedicated coroutine thread."""
+    def __init__(self, interp, func_def, env):
+        self.interp = interp
+        self.func_def = func_def
+        self.env = env
+        self.completed = False
+        self.out_queue = queue.Queue()
+        self.in_queue = queue.Queue()
+        self.thread = threading.Thread(target=self._run_worker, daemon=True)
+        self.thread.start()
+
+    def _run_worker(self):
+        self.in_queue.get()
+        old_env = self.interp.current_env
+        self.interp.current_env = self.env
+        try:
+            self.interp.active_generator = self
+            self.interp.exec_block(self.func_def.body, self.env)
+        except Exception:
+            pass
+        finally:
+            self.interp.active_generator = None
+            self.interp.current_env = old_env
+            self.completed = True
+            self.out_queue.put(None)
+
+    def yield_val(self, val):
+        self.out_queue.put(val)
+        self.in_queue.get()
+
+    def next(self, args=None):
+        if self.completed:
+            return None
+        self.in_queue.put(True)
+        val = self.out_queue.get()
+        return val
+
+    def __iter__(self):
+        while not self.completed:
+            val = self.next()
+            if self.completed and val is None:
+                break
+            yield val
+
 
 # ─── Min Objects ──────────────────────────────────────────────
 
@@ -161,7 +214,7 @@ class Interpreter:
             if not e.stack_trace and self.call_stack:
                 e.stack_trace = list(self.call_stack)
             raise e
-        except (ReturnSignal, BreakSignal, ContinueSignal):
+        except (ReturnSignal, BreakSignal, ContinueSignal, YieldSignal):
             raise
         except Exception as py_err:
             err_msg = str(py_err)
@@ -304,6 +357,13 @@ class Interpreter:
                     self.current_env = old_env
             return results
         
+        if isinstance(node, Yield):
+            val = self.exec(node.value)
+            if getattr(self, 'active_generator', None):
+                self.active_generator.yield_val(val)
+                return val
+            raise YieldSignal(val)
+
         if isinstance(node, DotAccess):
             obj = self.exec(node.object)
             if isinstance(obj, MinInstance):
@@ -311,6 +371,8 @@ class Interpreter:
                 if isinstance(val, FunctionDef):
                     return BoundMethod(obj, val)
                 return val
+            if isinstance(obj, MinGenerator) and node.member == 'next':
+                return obj.next
             if isinstance(obj, dict):
                 if node.member in obj:
                     return obj[node.member]
@@ -542,6 +604,18 @@ class Interpreter:
                 env.set(callee.vararg, rest_args)
             elif len(args) > num_params:
                 raise ArgumentError(f"Expected at most {num_params} args, got {len(args)}")
+            
+            def is_gen(n):
+                if isinstance(n, Yield):
+                    return True
+                if hasattr(n, 'body') and isinstance(n.body, list):
+                    return any(is_gen(sub) for sub in n.body)
+                if hasattr(n, 'statements') and isinstance(n.statements, list):
+                    return any(is_gen(sub) for sub in n.statements)
+                return False
+
+            if is_gen(callee):
+                return MinGenerator(self, callee, env)
             
             fn_name = callee.name if callee.name and callee.name.startswith('@') else (f"@{callee.name}" if callee.name else "@lambda")
             frame = CallFrame(fn_name=fn_name, filename=self.filename, line=self.current_line, col=self.current_col)

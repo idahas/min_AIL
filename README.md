@@ -1497,16 +1497,120 @@ Source Code (string)
 
 | Feature | Status | Example / Usage |
 |---------|--------|-----------------|
-| **Lexical Closures** | ✅ Supported | `@outer(x) [@inner(y) [+ x y]]` |
+| **Lexical Closures** | ✅ Supported | `@make_adder(x) [@(y) [+ x y]]` |
 | **Pattern Matching** | ✅ Supported | `!match (val) [ 1 ["one"] !else ["other"] ]` |
 | **String Interpolation** | ✅ Supported | `"Hello {name}, x = {+ x 1}"` |
 | **Default / Optional Arguments** | ✅ Supported | `@greet(name prefix="Hello")` |
 | **Variadic Rest Parameters** | ✅ Supported | `@sum_all(...items)` |
-| **Multiple Return Destructuring** | ✅ Supported | `[:a :b] [10: 20]` |
+| **Multiple Return Destructuring** | ✅ Supported | `[:a :b] [100: 200]` |
 | **List Comprehensions** | ✅ Supported | `[for x arr (* x 10)]` |
 | **Multithreading** | ✅ Supported | `@thread(func)` background execution |
-| **Coroutines / Generators** | ⏳ Planned | Future async/await roadmap |
-| **Object Introspection** | ⏳ Planned | `type`, `keys`, `values` supported; deep reflection planned |
+| **Coroutines & Generators** | ✅ Supported | `@gen(start end) [!while (< start end) [!yield start :start (+ start 1)]]` |
+| **Object Introspection** | ✅ Supported | `@methods(obj)`, `@fields(obj)`, `@is_a(obj: "Class")` |
+
+---
+
+## Language Extensions & Resolved Features Guide
+
+### 1. Lexical Closures
+Functions capture their surrounding lexical environment scope at definition time.
+```min
+@make_adder(x) [
+  @(y) [+ x y]
+]
+:add5 (@make_adder 5)
+:res (@add5 10)  ; res = 15
+```
+
+### 2. Multithreading
+Execute functions concurrently in background daemon threads using `@thread`.
+```min
+:counter 0
+@async_task() [
+  :counter (+ counter 1)
+]
+:t @thread(async_task)
+```
+
+### 3. List Comprehensions
+Concise array transformations and filtering inside brackets `[for var iterable expr]`.
+```min
+:doubled [for x [1: 2: 3: 4] (* x 2)]            ; [2, 4, 6, 8]
+:filtered [for x [1: 2: 3: 4: 5] ? (> x 2) (* x 10)] ; [30, 40, 50]
+```
+
+### 4. String Interpolation
+Evaluate expressions inside `{}` directly within string literals.
+```min
+:name "Alice"
+:x 10
+:greeting "Hello {name}, x + 5 = {+ x 5}"
+```
+
+### 5. Multiple Return Value Destructuring
+Unpack array return values directly into multiple target variables.
+```min
+@get_coords() [[100: 200]]
+[:x :y] (@get_coords)   ; x = 100, y = 200
+```
+
+### 6. Default / Optional Arguments
+Provide default parameter values for functions when arguments are omitted.
+```min
+@greet(name prefix="Hello") [
+  "{prefix} {name}!"
+]
+:a @greet("Bob")         ; "Hello Bob!"
+:b @greet("Bob": "Hi")   ; "Hi Bob!"
+```
+
+### 7. Variadic Rest Parameters
+Collect excess arguments into a list parameter using `...` or `*`.
+```min
+@sum_all(...items) [
+  @reduce(items: @(acc x) [+ acc x]: 0)
+]
+:total @sum_all(10: 20: 30: 40)  ; 100
+```
+
+### 8. Coroutines & Generators
+Pause and resume execution state in generator functions using `!yield`.
+```min
+@range_gen(start end) [
+  !while (< start end) [
+    !yield start
+    :start (+ start 1)
+  ]
+]
+:gen @range_gen(10: 13)
+:a gen.next()  ; 10
+:b gen.next()  ; 11
+:c gen.next()  ; 12
+```
+
+### 9. Object Introspection
+Inspect object instance methods, fields, and inheritance hierarchies at runtime.
+```min
+!class Animal [
+  :species "Canine"
+  @speak() ["Woof"]
+]
+:a !new Animal()
+:m @methods(a)            ; ["speak"]
+:f @fields(a)             ; {"species": "Canine"}
+:is_anim @is_a(a: "Animal") ; True
+```
+
+### 10. Pattern Matching
+Branch conditionally based on expression value matching using `!match`.
+```min
+:status 200
+:msg !match (status) [
+  200 ["OK"]
+  404 ["Not Found"]
+  !else ["Error"]
+]
+```
 
 ### Performance
 

@@ -397,6 +397,62 @@ def _thread(args, interp=None):
     return t
 
 
+def _methods(args):
+    if len(args) != 1:
+        raise ArgumentError("methods expects 1 argument")
+    obj = args[0]
+    from .interpreter import MinInstance
+    from .ast_nodes import ClassDef
+    if isinstance(obj, MinInstance):
+        methods = [m.name for m in obj.class_def.methods]
+        if obj.class_def.init_method:
+            methods.append('init')
+        return methods
+    if isinstance(obj, ClassDef):
+        return [m.name for m in obj.methods]
+    if isinstance(obj, dict):
+        return list(obj.keys())
+    raise MinTypeError("methods requires an object instance or class")
+
+
+def _fields(args, interp=None):
+    if len(args) != 1:
+        raise ArgumentError("fields expects 1 argument")
+    obj = args[0]
+    from .interpreter import MinInstance
+    from .ast_nodes import ClassDef, Node
+    if isinstance(obj, MinInstance):
+        res = {}
+        for k, v in obj.fields.items():
+            if isinstance(v, Node) and interp is not None:
+                res[k] = interp.exec(v)
+            elif hasattr(v, 'value'):
+                res[k] = v.value
+            else:
+                res[k] = v
+        return res
+    if isinstance(obj, ClassDef):
+        return list(obj.fields.keys())
+    if isinstance(obj, dict):
+        return list(obj.keys())
+    raise MinTypeError("fields requires an object instance or class")
+
+
+def _is_a(args):
+    if len(args) != 2:
+        raise ArgumentError("is_a expects 2 arguments (instance, class_name)")
+    obj = args[0]
+    target_class = str(args[1])
+    from .interpreter import MinInstance
+    if isinstance(obj, MinInstance):
+        curr = obj.class_def
+        while curr:
+            if curr.name == target_class:
+                return True
+            curr = getattr(curr, '_parent_class_def', None)
+    return False
+
+
 # ─── Register all builtins ────────────────────────────────────
 
 BUILTINS = {
@@ -444,6 +500,9 @@ BUILTINS = {
     'clock': _clock,
     'error': _error,
     'thread': _thread,
+    'methods': _methods,
+    'fields': _fields,
+    'is_a': _is_a,
 }
 
 

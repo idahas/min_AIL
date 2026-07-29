@@ -78,7 +78,7 @@ class TestStandardLibrary(unittest.TestCase):
 
         # Reduce with custom accumulator function
         source_reduce = (
-            "@sum_sq(acc x) [+ acc (* x x)]\n"
+            "@sum_sq(acc x) [+ acc * x x]\n"
             "@reduce([1:2:3:4]: sum_sq: 0)\n"
         )
         self.assertEqual(run(source_reduce), 30)

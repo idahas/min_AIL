@@ -9,7 +9,7 @@ from .ast_nodes import (
     If, While, For, Break, Continue, Return,
     FunctionDef, ClassDef, ObjectInit,
     Print, Input, Import, Export,
-    TryCatch, Throw, MatchCase, Match, MultiAssignment, ListComprehension, Program
+    TryCatch, Throw, MatchCase, Match, MultiAssignment, ListComprehension, Yield, Program
 )
 
 
@@ -175,6 +175,10 @@ class Parser:
         if token.type == TT.THROW:
             self.advance()
             return self.parse_throw()
+        if token.type == TT.YIELD:
+            self.advance()
+            val = self.parse_expression()
+            return Yield(val)
         if token.type == TT.CLASS:
             self.advance()
             return self.parse_class_def()
@@ -452,9 +456,15 @@ class Parser:
                     init_method = method
                 elif isinstance(method, FunctionDef):
                     methods.append(method)
+            elif self.check(TT.COLON):
+                self.advance()
+                field_name = self.expect(TT.IDENT).value
+                field_val = self.parse_expression()
+                fields[field_name] = field_val
             elif self.check(TT.IDENT):
                 field_name = self.advance().value
-                self.expect(TT.COLON)
+                if self.check(TT.COLON):
+                    self.advance()
                 field_val = self.parse_expression()
                 fields[field_name] = field_val
             else:
@@ -533,10 +543,6 @@ class Parser:
                 paren_depth += 1
             elif self.tokens[saved_pos].type == TT.RPAREN:
                 paren_depth -= 1
-            saved_pos += 1
-        
-        # Skip trailing newlines after RPAREN
-        while saved_pos < len(self.tokens) and self.tokens[saved_pos].type == TT.NEWLINE:
             saved_pos += 1
         
         if saved_pos < len(self.tokens) and self.tokens[saved_pos].type == TT.LBRACKET:
@@ -687,10 +693,12 @@ class Parser:
             return ListComprehension(var_name, iterable, expr, cond)
 
         elements = []
-        if not self.check(TT.RBRACKET):
+        while not self.check(TT.RBRACKET) and not self.check(TT.EOF):
+            if self.check(TT.COLON):
+                self.advance()
+            if self.check(TT.RBRACKET):
+                break
             elements.append(self.parse_expression())
-            while self.match(TT.COLON):
-                elements.append(self.parse_expression())
         
         self.expect(TT.RBRACKET)
         return Array(elements)
@@ -728,6 +736,21 @@ class Parser:
                 index = self.parse_expression()
                 self.expect(TT.RBRACKET)
                 node = IndexAccess(node, index)
+            
+            # Function/Method call: obj.method(...) or func(...)
+            elif self.check(TT.LPAREN):
+                self.advance()
+                args = []
+                if not self.check(TT.RPAREN):
+                    args.append(self.parse_expression())
+                    while self.match(TT.COLON) or (not self.check(TT.RPAREN) and not self.check(TT.LBRACKET)):
+                        if self.check(TT.RPAREN) or self.check(TT.LBRACKET):
+                            break
+                        if self.check(TT.COLON):
+                            self.advance()
+                        args.append(self.parse_expression())
+                self.expect(TT.RPAREN)
+                node = FunctionCall(node, args)
             
             else:
                 break

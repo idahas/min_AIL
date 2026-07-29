@@ -74,6 +74,7 @@ class TT(Enum):
     THIS = auto()       # !this
     EXTENDS = auto()    # !extends
     MATCH = auto()      # !match
+    YIELD = auto()      # !yield
 
 
 KEYWORDS = {
@@ -97,6 +98,7 @@ KEYWORDS = {
     "!this": TT.THIS,
     "!extends": TT.EXTENDS,
     "!match": TT.MATCH,
+    "!yield": TT.YIELD,
 }
 
 

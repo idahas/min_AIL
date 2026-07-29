@@ -193,6 +193,10 @@ class Match(Node):
     cases: list[MatchCase]
     default_body: list[Node] | None = None
 
+@dataclass
+class Yield(Node):
+    value: Node
+
 
 # ─── Root ────────────────────────────────────────────────────
 
