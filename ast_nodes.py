@@ -108,6 +108,21 @@ class Return(Node):
     value: Node | None = None
 
 
+from dataclasses import dataclass, field
+
+@dataclass
+class MultiAssignment(Node):
+    targets: list[str]
+    value: Node
+
+@dataclass
+class ListComprehension(Node):
+    var_name: str
+    iterable: Node
+    expr: Node
+    condition: Node | None = None
+
+
 # ─── Functions & Classes ─────────────────────────────────────
 
 @dataclass
@@ -115,6 +130,8 @@ class FunctionDef(Node):
     name: str
     params: list[str]
     body: list[Node]
+    defaults: dict[str, Node] = field(default_factory=dict)
+    vararg: str | None = None
 
 @dataclass
 class ClassDef(Node):

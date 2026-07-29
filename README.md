@@ -1491,20 +1491,22 @@ Source Code (string)
 
 ---
 
-## Limitations
+## Features & Limitations Overview
 
-### Current (v0.1.0)
+### Language Features Status
 
-1. **No closures** — Functions capture scope at definition time but don't create closures
-2. **No coroutines** — No async/await or generators
-3. **No threads** — Single-threaded execution only
-4. **No introspection** — Limited ability to inspect objects at runtime
-5. **No pattern matching** — No switch/match statements
-6. **No list comprehensions** — Use `!map`/`!filter` instead
-7. **No string interpolation** — Use `+` concatenation
-8. **No multiple return values** — Return arrays or objects instead
-9. **No optional arguments** — All arguments required
-10. **No variadic functions** — Fixed argument count only
+| Feature | Status | Example / Usage |
+|---------|--------|-----------------|
+| **Lexical Closures** | ✅ Supported | `@outer(x) [@inner(y) [+ x y]]` |
+| **Pattern Matching** | ✅ Supported | `!match (val) [ 1 ["one"] !else ["other"] ]` |
+| **String Interpolation** | ✅ Supported | `"Hello {name}, x = {+ x 1}"` |
+| **Default / Optional Arguments** | ✅ Supported | `@greet(name prefix="Hello")` |
+| **Variadic Rest Parameters** | ✅ Supported | `@sum_all(...items)` |
+| **Multiple Return Destructuring** | ✅ Supported | `[:a :b] [10: 20]` |
+| **List Comprehensions** | ✅ Supported | `[for x arr (* x 10)]` |
+| **Multithreading** | ✅ Supported | `@thread(func)` background execution |
+| **Coroutines / Generators** | ⏳ Planned | Future async/await roadmap |
+| **Object Introspection** | ⏳ Planned | `type`, `keys`, `values` supported; deep reflection planned |
 
 ### Performance
 

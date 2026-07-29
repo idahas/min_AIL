@@ -382,6 +382,21 @@ def _error(args):
     raise MinTypeError(str(args[0]))
 
 
+def _thread(args, interp=None):
+    if len(args) < 1:
+        raise ArgumentError("thread expects a function argument")
+    func = args[0]
+    func_args = args[1:] if len(args) > 1 else []
+    if interp is None:
+        from .interpreter import Interpreter
+        interp = Interpreter()
+    
+    import threading
+    t = threading.Thread(target=interp.call_function, args=(func, func_args), daemon=True)
+    t.start()
+    return t
+
+
 # ─── Register all builtins ────────────────────────────────────
 
 BUILTINS = {
@@ -428,6 +443,7 @@ BUILTINS = {
     'time': _time,
     'clock': _clock,
     'error': _error,
+    'thread': _thread,
 }
 
 

@@ -187,12 +187,45 @@ class Interpreter:
             self.current_line = old_line
             self.current_col = old_col
 
+    def interpolate_string(self, text: str) -> str:
+        if '{' not in text or '}' not in text:
+            return text
+        from .lexer import tokenize
+        from .parser import parse
+        
+        result = []
+        i = 0
+        n = len(text)
+        while i < n:
+            if text[i] == '{' and (i == 0 or text[i-1] != '\\'):
+                start = i + 1
+                depth = 1
+                i += 1
+                while i < n and depth > 0:
+                    if text[i] == '{':
+                        depth += 1
+                    elif text[i] == '}':
+                        depth -= 1
+                    i += 1
+                expr_str = text[start:i-1]
+                try:
+                    tokens = tokenize(expr_str)
+                    ast = parse(tokens, filename=self.filename)
+                    val = self.exec(ast)
+                    result.append(str(val))
+                except Exception:
+                    result.append(f"{{{expr_str}}}")
+            else:
+                result.append(text[i])
+                i += 1
+        return "".join(result)
+
     def _exec_internal(self, node: Node):
         """Execute a single node."""
         if isinstance(node, Number):
             return node.value
         if isinstance(node, String):
-            return node.value
+            return self.interpolate_string(node.value)
         if isinstance(node, Boolean):
             return node.value
         if isinstance(node, Null):
@@ -238,6 +271,38 @@ class Interpreter:
                 else:
                     raise MinRuntimeError("Cannot index non-collection")
             return value
+
+        if isinstance(node, MultiAssignment):
+            val = self.exec(node.value)
+            if not isinstance(val, list):
+                val = [val]
+            for target_name, item in zip(node.targets, val):
+                try:
+                    self.current_env.assign(target_name, item)
+                except NameError:
+                    self.current_env.set(target_name, item)
+            return val
+
+        if isinstance(node, ListComprehension):
+            iterable_val = self.exec(node.iterable)
+            if not isinstance(iterable_val, (list, str)):
+                raise MinTypeError("List comprehension requires an iterable (array or string)")
+            results = []
+            for item in iterable_val:
+                loop_env = Environment(self.current_env)
+                loop_env.set(node.var_name, item)
+                old_env = self.current_env
+                self.current_env = loop_env
+                try:
+                    if node.condition:
+                        cond_val = self.exec(node.condition)
+                        if not cond_val:
+                            continue
+                    elem = self.exec(node.expr)
+                    results.append(elem)
+                finally:
+                    self.current_env = old_env
+            return results
         
         if isinstance(node, DotAccess):
             obj = self.exec(node.object)
@@ -461,15 +526,24 @@ class Interpreter:
         
         # User-defined function
         if isinstance(callee, FunctionDef):
-            if len(args) != len(callee.params):
-                raise ArgumentError(
-                    f"Expected {len(callee.params)} args, got {len(args)}"
-                )
             env = Environment(self.current_env)
-            for param, arg in zip(callee.params, args):
-                env.set(param, arg)
             
-            fn_name = callee.name if callee.name.startswith('@') else f"@{callee.name}"
+            num_params = len(callee.params)
+            for i, param in enumerate(callee.params):
+                if i < len(args):
+                    env.set(param, args[i])
+                elif hasattr(callee, 'defaults') and param in callee.defaults:
+                    env.set(param, self.exec(callee.defaults[param]))
+                else:
+                    raise ArgumentError(f"Missing required argument: {param}")
+            
+            if hasattr(callee, 'vararg') and callee.vararg:
+                rest_args = args[num_params:] if len(args) > num_params else []
+                env.set(callee.vararg, rest_args)
+            elif len(args) > num_params:
+                raise ArgumentError(f"Expected at most {num_params} args, got {len(args)}")
+            
+            fn_name = callee.name if callee.name and callee.name.startswith('@') else (f"@{callee.name}" if callee.name else "@lambda")
             frame = CallFrame(fn_name=fn_name, filename=self.filename, line=self.current_line, col=self.current_col)
             self.call_stack.append(frame)
             try:

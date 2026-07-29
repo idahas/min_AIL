@@ -9,7 +9,7 @@ from .ast_nodes import (
     If, While, For, Break, Continue, Return,
     FunctionDef, ClassDef, ObjectInit,
     Print, Input, Import, Export,
-    TryCatch, Throw, MatchCase, Match, Program
+    TryCatch, Throw, MatchCase, Match, MultiAssignment, ListComprehension, Program
 )
 
 
@@ -99,8 +99,30 @@ class Parser:
     def _parse_statement_impl(self):
         token = self.peek()
         
-        # Block (implicit return of last expression)
+        # Block or destructuring assignment [:a :b] val or ListComprehension [for ...]
         if token.type == TT.LBRACKET:
+            next_token = self.tokens[self.pos + 1] if self.pos + 1 < len(self.tokens) else None
+            if next_token and next_token.type == TT.COLON:
+                self.advance()  # consume [
+                targets = []
+                while self.check(TT.COLON):
+                    self.advance()
+                    targets.append(self.expect(TT.IDENT).value)
+                self.expect(TT.RBRACKET)
+                val = self.parse_expression()
+                return MultiAssignment(targets, val)
+            if next_token and (next_token.type == TT.FOR or (next_token.type == TT.IDENT and next_token.value == 'for')):
+                self.advance()  # consume [
+                self.advance()  # consume for / !for
+                var_name = self.expect(TT.IDENT).value
+                iterable = self.parse_expression()
+                cond = None
+                if self.check(TT.QUESTION):
+                    self.advance()
+                    cond = self.parse_expression()
+                expr = self.parse_expression()
+                self.expect(TT.RBRACKET)
+                return ListComprehension(var_name, iterable, expr, cond)
             return self.parse_block()
         
         # Variable assignment: :x expr or :x.field expr
@@ -460,57 +482,99 @@ class Parser:
         return ObjectInit(class_name, args)
     
     def parse_at_expr(self):
-        """Parse @func(args) [body] (definition), @(args) [body] (anonymous lambda), or @func(args) (call)."""
+        """Parse @func(params) [body] (definition), @(params) [body] (anonymous lambda), or @func(args) (call)."""
         self.expect(TT.AT)
         
         # Anonymous lambda: @(params) [body]
         if self.check(TT.LPAREN):
             self.expect(TT.LPAREN)
             params = []
-            if not self.check(TT.RPAREN):
-                if self.check(TT.IDENT):
-                    params.append(self.expect(TT.IDENT).value)
-                while not self.check(TT.RPAREN) and not self.is_at_end():
-                    if self.check(TT.COLON):
-                        self.advance()
-                    if self.check(TT.IDENT):
-                        params.append(self.expect(TT.IDENT).value)
-                    else:
-                        break
-            self.expect(TT.RPAREN)
-            body = self.parse_block()
-            return FunctionDef("", params, body)
-
-        name = self.expect(TT.IDENT).value
-        
-        # Parse args in parens
-        self.expect(TT.LPAREN)
-        args = []
-        if not self.check(TT.RPAREN):
-            args.append(self.parse_expression())
-            while self.match(TT.COLON) or (not self.check(TT.RPAREN) and not self.check(TT.LBRACKET)):
-                if self.check(TT.RPAREN) or self.check(TT.LBRACKET):
-                    break
+            defaults = {}
+            vararg = None
+            
+            while not self.check(TT.RPAREN) and not self.check(TT.EOF):
                 if self.check(TT.COLON):
                     self.advance()
-                args.append(self.parse_expression())
-        self.expect(TT.RPAREN)
-        
-        # Extract param names from arg nodes
-        params = []
-        for a in args:
-            if isinstance(a, Identifier):
-                params.append(a.name)
-            else:
-                params.append("_")
-        
-        # If followed by [ it's a function definition
-        if self.check(TT.LBRACKET):
+                    continue
+                tok = self.peek()
+                if tok.type == TT.IDENT and (tok.value.startswith('...') or tok.value.startswith('*')):
+                    vararg = self.advance().value.lstrip('.*')
+                    continue
+                if tok.type == TT.IDENT:
+                    p_name = self.advance().value
+                    params.append(p_name)
+                    if self.check(TT.EQ) or self.check(TT.COLON):
+                        self.advance()
+                        defaults[p_name] = self.parse_expression()
+                else:
+                    break
+            self.expect(TT.RPAREN)
             body = self.parse_block()
-            return FunctionDef(name, params, body)
+            return FunctionDef("", params, body, defaults=defaults, vararg=vararg)
+
+        name = self.expect(TT.IDENT).value
+        self.expect(TT.LPAREN)
         
-        # Otherwise it's always a function call
-        return FunctionCall(Identifier(name), args)
+        # Check if followed by [ after ) -> Function definition
+        # Parse parameters
+        params = []
+        defaults = {}
+        vararg = None
+        args = []
+        is_def = False
+        
+        # Peek ahead to check if this is function definition or call
+        # If followed by LBRACKET after matching RPAREN, it's a definition
+        saved_pos = self.pos
+        paren_depth = 1
+        has_lbracket_after = False
+        while saved_pos < len(self.tokens) and paren_depth > 0:
+            if self.tokens[saved_pos].type == TT.LPAREN:
+                paren_depth += 1
+            elif self.tokens[saved_pos].type == TT.RPAREN:
+                paren_depth -= 1
+            saved_pos += 1
+        
+        # Skip trailing newlines after RPAREN
+        while saved_pos < len(self.tokens) and self.tokens[saved_pos].type == TT.NEWLINE:
+            saved_pos += 1
+        
+        if saved_pos < len(self.tokens) and self.tokens[saved_pos].type == TT.LBRACKET:
+            is_def = True
+
+        if is_def:
+            while not self.check(TT.RPAREN) and not self.check(TT.EOF):
+                if self.check(TT.COLON):
+                    self.advance()
+                    continue
+                if self.check(TT.STAR) or self.check(TT.DOT):
+                    while self.check(TT.STAR) or self.check(TT.DOT):
+                        self.advance()
+                    vararg = self.expect(TT.IDENT).value
+                    continue
+                tok = self.peek()
+                if tok.type == TT.IDENT:
+                    p_name = self.advance().value
+                    params.append(p_name)
+                    if self.check(TT.EQ) or self.check(TT.COLON):
+                        self.advance()
+                        defaults[p_name] = self.parse_expression()
+                else:
+                    break
+            self.expect(TT.RPAREN)
+            body = self.parse_block()
+            return FunctionDef(name, params, body, defaults=defaults, vararg=vararg)
+        else:
+            if not self.check(TT.RPAREN):
+                args.append(self.parse_expression())
+                while self.match(TT.COLON) or (not self.check(TT.RPAREN) and not self.check(TT.LBRACKET)):
+                    if self.check(TT.RPAREN) or self.check(TT.LBRACKET):
+                        break
+                    if self.check(TT.COLON):
+                        self.advance()
+                    args.append(self.parse_expression())
+            self.expect(TT.RPAREN)
+            return FunctionCall(Identifier(name), args)
     
     def parse_identifier_or_dot(self):
         """Parse identifier or dot access chain."""
@@ -607,10 +671,22 @@ class Parser:
         )
     
     def parse_array(self):
-        """Parse [ elements... ]"""
+        """Parse [ elements... ] or [for var iterable expr]"""
         self.expect(TT.LBRACKET)
+        tok = self.peek()
+        if tok.type == TT.FOR or (tok.type == TT.IDENT and tok.value == 'for'):
+            self.advance()  # consume for / !for
+            var_name = self.expect(TT.IDENT).value
+            iterable = self.parse_expression()
+            cond = None
+            if self.check(TT.QUESTION):
+                self.advance()
+                cond = self.parse_expression()
+            expr = self.parse_expression()
+            self.expect(TT.RBRACKET)
+            return ListComprehension(var_name, iterable, expr, cond)
+
         elements = []
-        
         if not self.check(TT.RBRACKET):
             elements.append(self.parse_expression())
             while self.match(TT.COLON):
