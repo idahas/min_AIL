@@ -1,0 +1,33 @@
+!class Animal [
+  name:""
+  sound:""
+  
+  @init(n s) [
+    :name n
+    :sound s
+  ]
+  
+  @speak() [
+    !print (+ name (+ " says " sound))
+  ]
+]
+
+!class Dog !extends Animal [
+  @init(n) [
+    :name n
+    :sound "Woof!"
+  ]
+]
+
+!class Cat !extends Animal [
+  @init(n) [
+    :name n
+    :sound "Meow!"
+  ]
+]
+
+:dog !new Dog("Rex")
+! dog speak
+
+:cat !new Cat("Whiskers")
+! cat speak

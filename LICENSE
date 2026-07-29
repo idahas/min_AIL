@@ -1,6 +1,10 @@
 MIT License
 
+<<<<<<< HEAD
 Copyright (c) 2026 IdaHas
+=======
+Copyright (c) 2026 idahas (https://github.com/idahas/min_AIL)
+>>>>>>> d87ccf5 (Initial commit: Complete Min Language Interpreter)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +23,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+<<<<<<< HEAD
+=======
+
+---
+
+### Attributions & Dependencies
+
+The Min Language interpreter is implemented cleanly using only the Python Standard Library (Python Software Foundation License).
+- Python (c) Python Software Foundation
+- Zero third-party external code packages or third-party code libraries are included or required.
+>>>>>>> d87ccf5 (Initial commit: Complete Min Language Interpreter)

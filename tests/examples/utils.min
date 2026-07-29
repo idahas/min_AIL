@@ -1,0 +1,10 @@
+@add(a b) [+ a b]
+@multiply(a b) [* a b]
+@factorial(n) [
+  ? (= n 0) [1]
+    [* n (@factorial (- n 1))]
+]
+@fib(n) [
+  ? (< n 2) [n]
+    [+ (@fib (- n 1)) (@fib (- n 2))]
+]

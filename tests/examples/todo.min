@@ -1,0 +1,35 @@
+@Todo(text)
+  {text:text done:#false}
+
+!class TodoList
+  items:[]
+  
+  @init()
+    :items []
+  
+  @add(text)
+    ! items push (@Todo text)
+    ! self print
+  
+  @toggle(idx)
+    : (. items idx done) (! (. items idx done))
+    ! self print
+  
+  @remove(idx)
+    ! items pop
+    ! self print
+  
+  @print()
+    !print "=== TODO LIST ==="
+    !for [i 0 (! len items)] [
+      :item (. items i)
+      :status (? (. item done) "[x]" "[ ]")
+      !print (+ (+ status " ") (. item text))
+    ]
+
+:todos (!new TodoList)
+! todos add "Learn Min"
+! todos add "Build something cool"
+! todos add "Ship it"
+! todos toggle 0
+! todos remove 2
