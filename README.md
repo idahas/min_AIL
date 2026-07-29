@@ -1,12 +1,9 @@
-<<<<<<< HEAD
-# min_AIL
-Min is a minimal language made for AI by AI
-=======
 # Min Language Specification
 
 **Version:** 0.1.0
 **Type:** Interpreted, general-purpose, AI-optimized
 **Implementation:** Tree-walking interpreter (Python)
+**Repository:** https://github.com/idahas/min_AIL.git
 
 ---
 
@@ -25,15 +22,15 @@ Min is a minimal language made for AI by AI
 11. [Arrays](#arrays)
 12. [Objects (Maps)](#objects-maps)
 13. [Strings](#strings)
-14. [Built-in Functions](#built-in-functions)
-15. [Error Handling](#error-handling)
-16. [Modules](#modules)
-17. [Scoping Rules](#scoping-rules)
-18. [Operator Precedence](#operator-precedence)
-19. [Examples](#examples)
-20. [Grammar](#grammar)
-21. [Architecture](#architecture)
-22. [Limitations](#limitations)
+14. [Concurrency](#concurrency)
+15. [Built-in Functions](#built-in-functions)
+16. [Error Handling](#error-handling)
+17. [Modules](#modules)
+18. [Scoping Rules](#scoping-rules)
+19. [Operator Precedence](#operator-precedence)
+20. [Examples](#examples)
+21. [Grammar](#grammar)
+22. [Architecture](#architecture)
 
 ---
 
@@ -480,6 +477,27 @@ With else:
 - `!return` without a value returns `#null`
 - Only meaningful inside function bodies
 
+### Coroutines & Generators (`!yield`)
+
+```min
+@range_gen(start end) [
+  !while (< start end) [
+    !yield start
+    :start (+ start 1)
+  ]
+]
+
+:gen @range_gen(10: 13)
+:a gen.next()   # 10
+:b gen.next()   # 11
+:c gen.next()   # 12
+```
+
+- `!yield EXPR` pauses generator execution and yields `EXPR` value back to caller.
+- Calling a function containing `!yield` returns a `MinGenerator` instance.
+- Stepping `.next()` resumes generator execution state from where it was suspended.
+- `MinGenerator` objects can also be iterated directly inside `!for` loops.
+
 ---
 
 ## Functions
@@ -505,21 +523,47 @@ With else:
 ]
 ```
 
-### Anonymous Functions (Lambdas)
+### Anonymous Functions (Lambdas) & Closures
 
 ```min
 # Inline lambda passed directly to @map
 :doubled (@map [1:2:3:4]: @(x) [* x 2])
 !print doubled        # [2:4:6:8]
 
-# Inline lambda with closure variable
+# Inline lambda with captured lexical closure variable
 :factor 10
 :scaled (@map [1:2:3]: @(x) [* x factor])
 !print scaled         # [10:20:30]
 ```
 
 - `@(params) [body]` creates an inline anonymous function.
-- Can capture variables from outer lexical scopes.
+- Lexical closures capture and preserve variables from surrounding definition scopes.
+
+### Default / Optional Parameters
+
+```min
+@greet(name prefix="Hello") [
+  "{prefix} {name}!"
+]
+
+:a @greet("Bob")         # "Hello Bob!"
+:b @greet("Bob": "Hi")   # "Hi Bob!"
+```
+
+- Parameters can specify default expressions `param=default_expr`.
+- If an argument is omitted when calling, the default value is used.
+
+### Variadic Rest Parameters
+
+```min
+@sum_all(...items) [
+  @reduce(items: @(acc x) [+ acc x]: 0)
+]
+
+:total @sum_all(10: 20: 30: 40)   # 100
+```
+
+- Parameters starting with `...` or `*` collect all excess positional arguments into a list.
 
 ### Recursive Functions
 
@@ -645,6 +689,24 @@ Outside methods, use dot assignment:
 - Child can override methods
 - Child fields override parent fields with same name
 
+### Object Introspection
+
+```min
+!class Animal [
+  :species "Canine"
+  @speak() ["Woof"]
+]
+
+:a !new Animal()
+:m @methods(a)              # ["speak"]
+:f @fields(a)               # {"species": "Canine"}
+:is_anim @is_a(a: "Animal") # true
+```
+
+- `@methods(obj)` returns a list of method names on an instance or class definition.
+- `@fields(obj)` returns a dictionary of runtime field names and values.
+- `@is_a(obj: "ClassName")` checks instance class membership and inheritance hierarchy.
+
 ### Instance Checking
 
 ```
@@ -664,11 +726,27 @@ Outside methods, use dot assignment:
 :empty []
 ```
 
-Elements separated by `:`. Can mix types.
+### Multiple Return Destructuring
+
+```min
+@get_pair() [[100: 200]]
+[:a :b] (@get_pair)   # a = 100, b = 200
+```
+
+- Unpacks elements from an array directly into target variable symbols.
+
+### List Comprehensions
+
+```min
+:doubled [for x [1: 2: 3: 4] (* x 10)]             # [10: 20: 30: 40]
+:filtered [for x [1: 2: 3: 4: 5] ? (> x 3) (* x 2)]  # [8: 10]
+```
+
+- Syntactic shorthand `[for VAR ITERABLE EXPR]` or `[for VAR ITERABLE ? COND EXPR]`.
 
 ### Access
 
-```
+```min
 :arr [10:20:30]
 (. arr 0)       # 10
 (. arr 2)       # 30
@@ -770,11 +848,20 @@ Index access uses prefix `.` syntax: `(. array index)`.
 
 ---
 
-## Strings
+### String Interpolation
+
+```min
+:name "Alice"
+:x 10
+:greeting "Hello {name}, x + 5 = {+ x 5}"
+!print greeting   # "Hello Alice, x + 5 = 15"
+```
+
+- Any expression enclosed in `{}` inside double quotes is evaluated dynamically.
 
 ### Concatenation
 
-```
+```min
 + "Hello" " World"          # "Hello World"
 + "Count: " 42              # "Count: 42"
 + "Pi is " 3.14             # "Pi is 3.14"
@@ -833,6 +920,24 @@ The `+` operator auto-converts non-string operands to strings.
 ```
 ! reverse "hello"   # "olleh"
 ```
+
+---
+
+## Concurrency
+
+### Multithreading (`@thread`)
+
+```min
+:counter 0
+@async_task() [
+  :counter (+ counter 1)
+]
+
+:t @thread(async_task)
+```
+
+- `@thread(func)` spawns and executes a target function concurrently in a background thread.
+- Returns a thread object instance supporting background concurrent task execution.
 
 ---
 
@@ -1491,127 +1596,6 @@ Source Code (string)
 
 ---
 
-## Features & Limitations Overview
-
-### Language Features Status
-
-| Feature | Status | Example / Usage |
-|---------|--------|-----------------|
-| **Lexical Closures** | ✅ Supported | `@make_adder(x) [@(y) [+ x y]]` |
-| **Pattern Matching** | ✅ Supported | `!match (val) [ 1 ["one"] !else ["other"] ]` |
-| **String Interpolation** | ✅ Supported | `"Hello {name}, x = {+ x 1}"` |
-| **Default / Optional Arguments** | ✅ Supported | `@greet(name prefix="Hello")` |
-| **Variadic Rest Parameters** | ✅ Supported | `@sum_all(...items)` |
-| **Multiple Return Destructuring** | ✅ Supported | `[:a :b] [100: 200]` |
-| **List Comprehensions** | ✅ Supported | `[for x arr (* x 10)]` |
-| **Multithreading** | ✅ Supported | `@thread(func)` background execution |
-| **Coroutines & Generators** | ✅ Supported | `@gen(start end) [!while (< start end) [!yield start :start (+ start 1)]]` |
-| **Object Introspection** | ✅ Supported | `@methods(obj)`, `@fields(obj)`, `@is_a(obj: "Class")` |
-
----
-
-## Language Extensions & Resolved Features Guide
-
-### 1. Lexical Closures
-Functions capture their surrounding lexical environment scope at definition time.
-```min
-@make_adder(x) [
-  @(y) [+ x y]
-]
-:add5 (@make_adder 5)
-:res (@add5 10)  ; res = 15
-```
-
-### 2. Multithreading
-Execute functions concurrently in background daemon threads using `@thread`.
-```min
-:counter 0
-@async_task() [
-  :counter (+ counter 1)
-]
-:t @thread(async_task)
-```
-
-### 3. List Comprehensions
-Concise array transformations and filtering inside brackets `[for var iterable expr]`.
-```min
-:doubled [for x [1: 2: 3: 4] (* x 2)]            ; [2, 4, 6, 8]
-:filtered [for x [1: 2: 3: 4: 5] ? (> x 2) (* x 10)] ; [30, 40, 50]
-```
-
-### 4. String Interpolation
-Evaluate expressions inside `{}` directly within string literals.
-```min
-:name "Alice"
-:x 10
-:greeting "Hello {name}, x + 5 = {+ x 5}"
-```
-
-### 5. Multiple Return Value Destructuring
-Unpack array return values directly into multiple target variables.
-```min
-@get_coords() [[100: 200]]
-[:x :y] (@get_coords)   ; x = 100, y = 200
-```
-
-### 6. Default / Optional Arguments
-Provide default parameter values for functions when arguments are omitted.
-```min
-@greet(name prefix="Hello") [
-  "{prefix} {name}!"
-]
-:a @greet("Bob")         ; "Hello Bob!"
-:b @greet("Bob": "Hi")   ; "Hi Bob!"
-```
-
-### 7. Variadic Rest Parameters
-Collect excess arguments into a list parameter using `...` or `*`.
-```min
-@sum_all(...items) [
-  @reduce(items: @(acc x) [+ acc x]: 0)
-]
-:total @sum_all(10: 20: 30: 40)  ; 100
-```
-
-### 8. Coroutines & Generators
-Pause and resume execution state in generator functions using `!yield`.
-```min
-@range_gen(start end) [
-  !while (< start end) [
-    !yield start
-    :start (+ start 1)
-  ]
-]
-:gen @range_gen(10: 13)
-:a gen.next()  ; 10
-:b gen.next()  ; 11
-:c gen.next()  ; 12
-```
-
-### 9. Object Introspection
-Inspect object instance methods, fields, and inheritance hierarchies at runtime.
-```min
-!class Animal [
-  :species "Canine"
-  @speak() ["Woof"]
-]
-:a !new Animal()
-:m @methods(a)            ; ["speak"]
-:f @fields(a)             ; {"species": "Canine"}
-:is_anim @is_a(a: "Animal") ; True
-```
-
-### 10. Pattern Matching
-Branch conditionally based on expression value matching using `!match`.
-```min
-:status 200
-:msg !match (status) [
-  200 ["OK"]
-  404 ["Not Found"]
-  !else ["Error"]
-]
-```
-
 ### Performance
 
 Min is a tree-walking interpreter. For compute-intensive tasks, it will be significantly slower than compiled languages. It's designed for:
@@ -1651,4 +1635,3 @@ SOFTWARE.
 
 Min is implemented from scratch with **zero third-party package dependencies**, running exclusively on the core Python standard library.
 - **Python**: (c) Python Software Foundation (PSF License).
->>>>>>> d87ccf5 (Initial commit: Complete Min Language Interpreter)
